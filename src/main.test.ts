@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { basename } from 'node:path';
+import { basename, extname } from 'node:path';
 import {
   findProcessesByName,
   getDescendants,
@@ -15,6 +15,8 @@ import {
 const parentFixture = fileURLToPath(
   new URL('../test/fixtures/parent.js', import.meta.url),
 );
+
+const execName = basename(process.execPath, extname(process.execPath));
 
 function isAlive(pid: number): boolean {
   try {
@@ -226,7 +228,7 @@ describe('listProcesses', () => {
     const processes = await listProcesses();
     const child = processes.find((proc) => proc.pid === childPid)!;
 
-    expect(child.name).toBe(basename(process.execPath));
+    expect(child.name).toBe(execName);
     expect(child.command).toContain('idle.js');
   });
 });
@@ -257,7 +259,6 @@ describe('getProcessInfo', () => {
 });
 
 describe('findProcessesByName', () => {
-  const execName = basename(process.execPath);
   let parent: ChildProcess;
   let childPid: number;
 

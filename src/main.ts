@@ -83,6 +83,8 @@ function buildProcessTree(
 const commandListPattern = /^\s*(\d+)\s+(.*)$/gm;
 // This matches `{ppid} {pid} {command}`, allowing spaces in the command
 const nameListPattern = /^\s*(\d+)\s+(\d+)\s+(.*)$/gm;
+// This matches the extensions windows includes in process names
+const executableExtensionPattern = /\.exe$/i;
 
 async function listProcessesUnix(): Promise<ProcessInfo[]> {
   const [commands, names] = await Promise.all([
@@ -138,7 +140,7 @@ async function listProcessesWindows(): Promise<ProcessInfo[]> {
   return processes.map((proc): ProcessInfo => ({
     pid: proc.ProcessId,
     ppid: proc.ParentProcessId,
-    name: proc.Name,
+    name: proc.Name.replace(executableExtensionPattern, ''),
     command: proc.CommandLine ?? proc.Name,
   }));
 }
