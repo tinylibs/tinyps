@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getProcessTree, killTree } from './main.js';
+import { getDescendants, getProcessTree, isRunning, killTree } from './main.js';
 
 const parentFixture = fileURLToPath(
   new URL('../test/fixtures/parent.js', import.meta.url),
@@ -49,35 +49,35 @@ describe('getProcessTree', () => {
     killTreeSync(parent, childPid);
   });
 
-  it('roots the tree at the given pid', async () => {
+  it('includes the given pid', async () => {
     const tree = await getProcessTree(parent.pid!);
 
-    expect(tree.root).toBe(parent.pid);
+    expect(tree.has(parent.pid!)).toBe(true);
   });
 
   it('includes descendants of the given pid', async () => {
     const tree = await getProcessTree(parent.pid!);
 
-    expect(tree.tree.get(parent.pid!)).toContain(childPid);
-    expect(tree.tree.has(childPid)).toBe(true);
+    expect(tree.get(parent.pid!)).toContain(childPid);
+    expect(tree.has(childPid)).toBe(true);
   });
 
   it('excludes processes outside the tree', async () => {
     const tree = await getProcessTree(childPid);
 
-    expect([...tree.tree.keys()]).toEqual([childPid]);
+    expect([...tree.keys()]).toEqual([childPid]);
   });
 
   it('produces an empty child list for a leaf process', async () => {
     const tree = await getProcessTree(childPid);
 
-    expect(tree.tree.get(childPid)).toEqual([]);
+    expect(tree.get(childPid)).toEqual([]);
   });
 
   it('produces a tree with no children for an unknown pid', async () => {
     const tree = await getProcessTree(-1);
 
-    expect(tree.tree).toEqual(new Map([[-1, []]]));
+    expect(tree).toEqual(new Map([[-1, []]]));
   });
 });
 
@@ -128,5 +128,61 @@ describe('killTree', () => {
     });
 
     await expect(killTree(parent.pid!)).resolves.toBeUndefined();
+  });
+});
+
+describe('isRunning', () => {
+  let parent: ChildProcess;
+  let childPid: number;
+
+  beforeEach(async () => {
+    ({ parent, childPid } = await spawnTree());
+  });
+
+  afterEach(() => {
+    killTreeSync(parent, childPid);
+  });
+
+  it('returns true for a running process', () => {
+    expect(isRunning(parent.pid!)).toBe(true);
+  });
+
+  it('returns false for a process which has exited', async () => {
+    killTreeSync(parent, childPid);
+    await vi.waitFor(() => {
+      expect(isAlive(parent.pid!)).toBe(false);
+    });
+
+    expect(isRunning(parent.pid!)).toBe(false);
+  });
+
+  it('returns false for a non-positive pid', () => {
+    expect(isRunning(0)).toBe(false);
+    expect(isRunning(-1)).toBe(false);
+  });
+});
+
+describe('getDescendants', () => {
+  let parent: ChildProcess;
+  let childPid: number;
+
+  beforeEach(async () => {
+    ({ parent, childPid } = await spawnTree());
+  });
+
+  afterEach(() => {
+    killTreeSync(parent, childPid);
+  });
+
+  it('resolves the descendants of the given pid', async () => {
+    expect(await getDescendants(parent.pid!)).toEqual([childPid]);
+  });
+
+  it('resolves an empty list for a leaf process', async () => {
+    expect(await getDescendants(childPid)).toEqual([]);
+  });
+
+  it('resolves an empty list for an unknown pid', async () => {
+    expect(await getDescendants(-1)).toEqual([]);
   });
 });

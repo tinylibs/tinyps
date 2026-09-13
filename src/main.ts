@@ -32,13 +32,10 @@ async function spawnAsync(
   });
 }
 
-export interface ProcessTree {
-  tree: Map<number, number[]>;
-  root: number;
-}
+export type ProcessTree = Map<number, number[]>;
 
 function killAll(processTree: ProcessTree, signal?: NodeJS.Signals): void {
-  for (const pid of processTree.tree.keys()) {
+  for (const pid of processTree.keys()) {
     try {
       process.kill(pid, signal);
     } catch (err) {
@@ -64,11 +61,11 @@ function buildProcessTree(
     childrenByParent.set(parentPid, children);
   }
 
-  const processTree: ProcessTree = { root: pid, tree: new Map() };
+  const processTree: ProcessTree = new Map();
   const queue = [pid];
   for (const current of queue) {
     const children = childrenByParent.get(current) ?? [];
-    processTree.tree.set(current, children);
+    processTree.set(current, children);
     queue.push(...children);
   }
   return processTree;
@@ -133,4 +130,22 @@ export async function getProcessTree(pid: number): Promise<ProcessTree> {
     return buildProcessTreeWindows(pid);
   }
   return buildProcessTreeUnix(pid);
+}
+
+export function isRunning(pid: number): boolean {
+  if (pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+export async function getDescendants(pid: number): Promise<number[]> {
+  const tree = await getProcessTree(pid);
+  return Array.from(tree.keys()).filter((current) => current !== pid);
 }
