@@ -44,6 +44,15 @@ console.log(tree.get(child.pid)); // [ 1234, 1235 ]
 - `pid` (`number`) - process to collect descendants of
 - Returns `Promise<number[]>`
 
+### `listProcesses()`
+
+- Returns `Promise<ProcessInfo[]>`
+
+### `getProcessInfo(pid)`
+
+- `pid` (`number`) - process to look up
+- Returns `Promise<ProcessInfo | undefined>`
+
 ## License
 
 MIT

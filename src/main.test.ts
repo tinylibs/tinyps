@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getDescendants, getProcessTree, isRunning, killTree } from './main.js';
+import { basename } from 'node:path';
+import {
+  getDescendants,
+  getProcessInfo,
+  getProcessTree,
+  isRunning,
+  killTree,
+  listProcesses,
+} from './main.js';
 
 const parentFixture = fileURLToPath(
   new URL('../test/fixtures/parent.js', import.meta.url),
@@ -184,5 +192,65 @@ describe('getDescendants', () => {
 
   it('resolves an empty list for an unknown pid', async () => {
     expect(await getDescendants(-1)).toEqual([]);
+  });
+});
+
+describe('listProcesses', () => {
+  let parent: ChildProcess;
+  let childPid: number;
+
+  beforeEach(async () => {
+    ({ parent, childPid } = await spawnTree());
+  });
+
+  afterEach(() => {
+    killTreeSync(parent, childPid);
+  });
+
+  it('includes running processes', async () => {
+    const processes = await listProcesses();
+
+    expect(processes.map((proc) => proc.pid)).toContain(childPid);
+  });
+
+  it('resolves the parent of each process', async () => {
+    const processes = await listProcesses();
+
+    expect(processes.find((proc) => proc.pid === childPid)!.ppid).toBe(
+      parent.pid,
+    );
+  });
+
+  it('resolves the name and command of each process', async () => {
+    const processes = await listProcesses();
+    const child = processes.find((proc) => proc.pid === childPid)!;
+
+    expect(child.name).toBe(basename(process.execPath));
+    expect(child.command).toContain('idle.js');
+  });
+});
+
+describe('getProcessInfo', () => {
+  let parent: ChildProcess;
+  let childPid: number;
+
+  beforeEach(async () => {
+    ({ parent, childPid } = await spawnTree());
+  });
+
+  afterEach(() => {
+    killTreeSync(parent, childPid);
+  });
+
+  it('resolves the info of the given process', async () => {
+    const info = (await getProcessInfo(childPid))!;
+
+    expect(info.pid).toBe(childPid);
+    expect(info.ppid).toBe(parent.pid);
+    expect(info.command).toContain('idle.js');
+  });
+
+  it('resolves undefined for an unknown pid', async () => {
+    expect(await getProcessInfo(-1)).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { basename } from 'node:path';
 import { platform } from 'node:process';
 
 async function spawnAsync(
@@ -33,6 +34,13 @@ async function spawnAsync(
 }
 
 export type ProcessTree = Map<number, number[]>;
+
+export interface ProcessInfo {
+  pid: number;
+  ppid: number;
+  name: string;
+  command: string;
+}
 
 function killAll(processTree: ProcessTree, signal?: NodeJS.Signals): void {
   for (const pid of processTree.keys()) {
@@ -71,36 +79,68 @@ function buildProcessTree(
   return processTree;
 }
 
-async function buildProcessTreeUnix(pid: number): Promise<ProcessTree> {
-  const { stdout } = await spawnAsync('ps', ['-A', '-o', 'pid=,ppid=']);
-  const processes = Array.from(
-    stdout.matchAll(/^\s*(\d+)\s+(\d+)/gm),
-    (match): [number, number] => [Number(match[1]), Number(match[2])],
+// This matches `{pid} {command}`, allowing spaces in the command
+const commandListPattern = /^\s*(\d+)\s+(.*)$/gm;
+// This matches `{ppid} {pid} {command}`, allowing spaces in the command
+const nameListPattern = /^\s*(\d+)\s+(\d+)\s+(.*)$/gm;
+
+async function listProcessesUnix(): Promise<ProcessInfo[]> {
+  const [commands, names] = await Promise.all([
+    spawnAsync('ps', ['-A', '-ww', '-o', 'ppid=,pid=,args=']),
+    spawnAsync('ps', ['-A', '-o', 'pid=,comm=']),
+  ]);
+
+  const executableByPid = new Map(
+    Array.from(
+      names.stdout.matchAll(commandListPattern),
+      (match): [number, string] => [Number(match[1]), match[2]!.trim()],
+    ),
   );
-  return buildProcessTree(pid, processes);
+
+  return Array.from(
+    commands.stdout.matchAll(nameListPattern),
+    (match): ProcessInfo => {
+      const pid = Number(match[2]);
+      const command = match[3]!.trim();
+      let executable = executableByPid.get(pid);
+
+      if (executable === undefined) {
+        const end = command.indexOf(' ');
+        executable = end === -1 ? command : command.slice(0, end);
+      }
+
+      return {
+        pid,
+        ppid: Number(match[1]),
+        name: basename(executable),
+        command,
+      };
+    },
+  );
 }
 
 interface Win32Process {
   ProcessId: number;
   ParentProcessId: number;
+  Name: string;
+  CommandLine: string | null;
 }
 
-async function buildProcessTreeWindows(pid: number): Promise<ProcessTree> {
+async function listProcessesWindows(): Promise<ProcessInfo[]> {
   const { stdout } = await spawnAsync('powershell.exe', [
     '-NoProfile',
     '-NonInteractive',
     '-Command',
-    'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress',
+    'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress',
   ]);
   const parsed: Win32Process | Win32Process[] = JSON.parse(stdout);
   const processes = Array.isArray(parsed) ? parsed : [parsed];
-  return buildProcessTree(
-    pid,
-    processes.map((proc): [number, number] => [
-      proc.ProcessId,
-      proc.ParentProcessId,
-    ]),
-  );
+  return processes.map((proc): ProcessInfo => ({
+    pid: proc.ProcessId,
+    ppid: proc.ParentProcessId,
+    name: proc.Name,
+    command: proc.CommandLine ?? proc.Name,
+  }));
 }
 
 async function killTreeWindows(pid: number): Promise<void> {
@@ -111,7 +151,7 @@ async function killTreeUnix(
   pid: number,
   signal?: NodeJS.Signals,
 ): Promise<void> {
-  const processTree = await buildProcessTreeUnix(pid);
+  const processTree = await getProcessTree(pid);
   killAll(processTree, signal);
 }
 
@@ -125,11 +165,26 @@ export async function killTree(
   return killTreeUnix(pid, signal);
 }
 
-export async function getProcessTree(pid: number): Promise<ProcessTree> {
+export async function listProcesses(): Promise<ProcessInfo[]> {
   if (platform === 'win32') {
-    return buildProcessTreeWindows(pid);
+    return listProcessesWindows();
   }
-  return buildProcessTreeUnix(pid);
+  return listProcessesUnix();
+}
+
+export async function getProcessInfo(
+  pid: number,
+): Promise<ProcessInfo | undefined> {
+  const processes = await listProcesses();
+  return processes.find((proc) => proc.pid === pid);
+}
+
+export async function getProcessTree(pid: number): Promise<ProcessTree> {
+  const processes = await listProcesses();
+  return buildProcessTree(
+    pid,
+    processes.map((proc): [number, number] => [proc.pid, proc.ppid]),
+  );
 }
 
 export function isRunning(pid: number): boolean {
