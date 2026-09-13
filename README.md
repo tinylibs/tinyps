@@ -53,6 +53,12 @@ console.log(tree.get(child.pid)); // [ 1234, 1235 ]
 - `pid` (`number`) - process to look up
 - Returns `Promise<ProcessInfo | undefined>`
 
+### `findProcessesByName(name, options?)`
+
+- `name` (`string`) - name to match against
+- `options.loose` (`boolean`, optional) - match any name containing `name`, ignoring case
+- Returns `Promise<ProcessInfo[]>`
+
 ## License
 
 MIT

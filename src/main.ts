@@ -179,6 +179,20 @@ export async function getProcessInfo(
   return processes.find((proc) => proc.pid === pid);
 }
 
+export async function findProcessesByName(
+  name: string,
+  options?: { loose?: boolean },
+): Promise<ProcessInfo[]> {
+  const processes = await listProcesses();
+
+  if (options?.loose) {
+    const needle = name.toLowerCase();
+    return processes.filter((proc) => proc.name.toLowerCase().includes(needle));
+  }
+
+  return processes.filter((proc) => proc.name === name);
+}
+
 export async function getProcessTree(pid: number): Promise<ProcessTree> {
   const processes = await listProcesses();
   return buildProcessTree(

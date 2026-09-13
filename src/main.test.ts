@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { basename } from 'node:path';
 import {
+  findProcessesByName,
   getDescendants,
   getProcessInfo,
   getProcessTree,
@@ -252,5 +253,51 @@ describe('getProcessInfo', () => {
 
   it('resolves undefined for an unknown pid', async () => {
     expect(await getProcessInfo(-1)).toBeUndefined();
+  });
+});
+
+describe('findProcessesByName', () => {
+  const execName = basename(process.execPath);
+  let parent: ChildProcess;
+  let childPid: number;
+
+  beforeEach(async () => {
+    ({ parent, childPid } = await spawnTree());
+  });
+
+  afterEach(() => {
+    killTreeSync(parent, childPid);
+  });
+
+  it('resolves processes with the given name', async () => {
+    const processes = await findProcessesByName(execName);
+
+    expect(processes.map((proc) => proc.pid)).toContain(childPid);
+  });
+
+  it('resolves an empty list when nothing matches', async () => {
+    expect(await findProcessesByName('definitely-not-a-process')).toEqual([]);
+  });
+
+  it('ignores partial matches by default', async () => {
+    const processes = await findProcessesByName(execName.slice(1));
+
+    expect(processes).toEqual([]);
+  });
+
+  it('matches partial names when loose', async () => {
+    const processes = await findProcessesByName(execName.slice(1), {
+      loose: true,
+    });
+
+    expect(processes.map((proc) => proc.pid)).toContain(childPid);
+  });
+
+  it('ignores case when loose', async () => {
+    const processes = await findProcessesByName(execName.toUpperCase(), {
+      loose: true,
+    });
+
+    expect(processes.map((proc) => proc.pid)).toContain(childPid);
   });
 });
