@@ -41,6 +41,8 @@ async function spawnAsync(
 
 export type ProcessTree = Map<number, number[]>;
 
+export type Protocol = 'tcp' | 'udp';
+
 export interface ProcessInfo {
   pid: number;
   ppid: number;
@@ -87,6 +89,8 @@ function buildProcessTree(
 
 // This matches `{ppid} {pid} {command}`, allowing spaces in the command
 const processListPattern = /^\s*(\d+)\s+(\d+)\s+(.*)$/gm;
+// `ss` reports socket owners as `users:(("name",pid=123,fd=4),...)`
+const socketOwnerPattern = /pid=(\d+)/g;
 // This matches the extensions windows includes in process names
 const executableExtensionPattern = /\.exe$/i;
 // Login shells are executed with a `-` prefixed to their argv[0]
@@ -141,6 +145,99 @@ async function listProcessesWindows(): Promise<ProcessInfo[]> {
   }));
 }
 
+async function findPidsByPortLinux(
+  port: number,
+  protocol?: Protocol,
+): Promise<number[]> {
+  const protocolArgs: string[] = [];
+  if (protocol !== 'udp') {
+    protocolArgs.push('-t');
+  }
+  if (protocol !== 'tcp') {
+    protocolArgs.push('-u');
+  }
+
+  const { stdout } = await spawnAsync('ss', [
+    '-nHpa',
+    ...protocolArgs,
+    `sport = :${port}`,
+  ]);
+
+  return Array.from(stdout.matchAll(socketOwnerPattern), (match) =>
+    Number(match[1]),
+  );
+}
+
+async function findPidsByPortDarwin(
+  port: number,
+  protocol?: Protocol,
+): Promise<number[]> {
+  const selector =
+    protocol === undefined
+      ? `-i:${port}`
+      : `-i${protocol.toUpperCase()}:${port}`;
+  // lsof exits 1 when nothing matches
+  const { stdout } = await spawnAsync(
+    'lsof',
+    ['-nP', '-Fpn', selector],
+    [0, 1],
+  );
+
+  const pids: number[] = [];
+  let currentPid: number | undefined;
+
+  // Field output is a `p{pid}` line followed by an `n{address}` line
+  for (const line of stdout.split('\n')) {
+    const value = line.slice(1);
+
+    if (line[0] === 'p') {
+      currentPid = Number(value);
+    } else if (line[0] === 'n' && currentPid !== undefined) {
+      // Example connected output: 192.168.1.99:57253->1.2.3.4:443
+      // Example listening output: [::1]:57355
+      const separator = value.indexOf('->');
+      const local = separator === -1 ? value : value.slice(0, separator);
+
+      if (Number(local.slice(local.lastIndexOf(':') + 1)) === port) {
+        pids.push(currentPid);
+      }
+    }
+  }
+
+  return pids;
+}
+
+async function findPidsByPortWindows(
+  port: number,
+  protocol?: Protocol,
+): Promise<number[]> {
+  const queries: string[] = [];
+  if (protocol !== 'udp') {
+    queries.push(`Get-NetTCPConnection -LocalPort ${port}`);
+  }
+  if (protocol !== 'tcp') {
+    queries.push(`Get-NetUDPEndpoint -LocalPort ${port}`);
+  }
+
+  const query = queries
+    .map((cmd) => `${cmd} -ErrorAction SilentlyContinue`)
+    .join('; ');
+  const { stdout } = await spawnAsync('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    `@(${query}) | Select-Object -ExpandProperty OwningProcess | ` +
+      'ConvertTo-Json -Compress',
+  ]);
+
+  if (stdout.trim() === '') {
+    return [];
+  }
+
+  const parsed: number | number[] = JSON.parse(stdout);
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
 async function killTreeWindows(pid: number): Promise<void> {
   // taskkill on windows exits 128 when its not found.
   // unix/macos exit with 0 when the process is not found.
@@ -191,6 +288,30 @@ export async function findProcessesByName(
   }
 
   return processes.filter((proc) => proc.name === name);
+}
+
+export async function findProcessesByPort(
+  port: number,
+  options?: { protocol?: Protocol },
+): Promise<ProcessInfo[]> {
+  let pids: number[];
+
+  if (platform === 'win32') {
+    pids = await findPidsByPortWindows(port, options?.protocol);
+  } else if (platform === 'linux') {
+    pids = await findPidsByPortLinux(port, options?.protocol);
+  } else {
+    pids = await findPidsByPortDarwin(port, options?.protocol);
+  }
+
+  const matched = new Set(pids);
+
+  if (matched.size === 0) {
+    return [];
+  }
+
+  const processes = await listProcesses();
+  return processes.filter((proc) => matched.has(proc.pid));
 }
 
 export async function getProcessTree(pid: number): Promise<ProcessTree> {

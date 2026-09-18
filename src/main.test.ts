@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer, type AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { basename, extname } from 'node:path';
 import {
   findProcessesByName,
+  findProcessesByPort,
   getDescendants,
   getProcessInfo,
   getProcessTree,
@@ -14,6 +16,14 @@ import {
 
 const parentFixture = fileURLToPath(
   new URL('../test/fixtures/parent.js', import.meta.url),
+);
+
+const listenerFixture = fileURLToPath(
+  new URL('../test/fixtures/listener.js', import.meta.url),
+);
+
+const clientFixture = fileURLToPath(
+  new URL('../test/fixtures/client.js', import.meta.url),
 );
 
 const execName = basename(process.execPath, extname(process.execPath));
@@ -46,6 +56,35 @@ function killTreeSync(parent: ChildProcess, childPid: number): void {
   if (isAlive(childPid)) {
     process.kill(childPid, 'SIGKILL');
   }
+}
+
+function spawnListener(): Promise<{ child: ChildProcess; port: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [listenerFixture]);
+    child.on('error', reject);
+    child.stdout.once('data', (data) => {
+      resolve({ child, port: Number(String(data).trim()) });
+    });
+  });
+}
+
+function spawnClient(port: number): Promise<ChildProcess> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [clientFixture, String(port)]);
+    child.on('error', reject);
+    child.stdout.once('data', () => resolve(child));
+  });
+}
+
+function getUnusedPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo;
+      server.close(() => resolve(port));
+    });
+  });
 }
 
 describe('getProcessTree', () => {
@@ -256,6 +295,58 @@ describe('getProcessInfo', () => {
 
   it('resolves undefined for an unknown pid', async () => {
     expect(await getProcessInfo(-1)).toBeUndefined();
+  });
+});
+
+describe('findProcessesByPort', () => {
+  let child: ChildProcess;
+  let port: number;
+
+  beforeEach(async () => {
+    ({ child, port } = await spawnListener());
+  });
+
+  afterEach(() => {
+    child.kill('SIGKILL');
+  });
+
+  it('resolves the process bound to the given port', async () => {
+    const processes = await findProcessesByPort(port);
+
+    expect(processes.map((proc) => proc.pid)).toContain(child.pid);
+  });
+
+  it('resolves the info of the process bound to the given port', async () => {
+    const [proc] = await findProcessesByPort(port);
+
+    expect(proc!.name).toBe(execName);
+    expect(proc!.command).toContain('listener.js');
+  });
+
+  it('resolves an empty list when nothing is bound to the port', async () => {
+    expect(await findProcessesByPort(await getUnusedPort())).toEqual([]);
+  });
+
+  it('resolves an empty list when the protocol does not match', async () => {
+    expect(await findProcessesByPort(port, { protocol: 'udp' })).toEqual([]);
+  });
+
+  it('resolves the process when the protocol matches', async () => {
+    const processes = await findProcessesByPort(port, { protocol: 'tcp' });
+
+    expect(processes.map((proc) => proc.pid)).toContain(child.pid);
+  });
+
+  it('ignores processes connected to the port remotely', async () => {
+    const client = await spawnClient(port);
+
+    try {
+      const processes = await findProcessesByPort(port);
+
+      expect(processes.map((proc) => proc.pid)).not.toContain(client.pid);
+    } finally {
+      client.kill('SIGKILL');
+    }
   });
 });
 
