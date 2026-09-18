@@ -47,7 +47,7 @@
     "url": "git+https://github.com/tinylibs/tinyproc.git"
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "@typescript/native-preview": "^7.0.0-dev.20260509.2",
     "@vitest/coverage-v8": "^5.0.0",
     "oxfmt": "^0.67.0",
