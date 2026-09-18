@@ -120,7 +120,8 @@ describe('killTree', () => {
 
     await killTree(parent.pid!, 'SIGKILL');
 
-    expect(await exited).toBe('SIGKILL');
+    // windows has no signals, so processes are terminated without one
+    expect(await exited).toBe(process.platform === 'win32' ? null : 'SIGKILL');
   });
 
   it('leaves processes outside the tree running', async () => {

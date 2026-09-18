@@ -5,6 +5,7 @@ import { platform } from 'node:process';
 async function spawnAsync(
   command: string,
   args: string[],
+  allowedExitCodes?: number[],
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args);
@@ -20,7 +21,12 @@ async function spawnAsync(
     });
 
     child.on('close', (code) => {
-      if (code === 0) {
+      const allowed =
+        allowedExitCodes === undefined || code === null
+          ? code === 0
+          : allowedExitCodes.includes(code);
+
+      if (allowed) {
         resolve({ stdout, stderr });
       } else {
         reject(new Error(`Command failed with exit code ${code}: ${stderr}`));
@@ -136,7 +142,9 @@ async function listProcessesWindows(): Promise<ProcessInfo[]> {
 }
 
 async function killTreeWindows(pid: number): Promise<void> {
-  await spawnAsync('taskkill', ['/pid', String(pid), '/T', '/F']);
+  // taskkill on windows exits 128 when its not found.
+  // unix/macos exit with 0 when the process is not found.
+  await spawnAsync('taskkill', ['/pid', String(pid), '/T', '/F'], [0, 128]);
 }
 
 async function killTreeUnix(
