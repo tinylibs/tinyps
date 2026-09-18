@@ -79,42 +79,32 @@ function buildProcessTree(
   return processTree;
 }
 
-// This matches `{pid} {command}`, allowing spaces in the command
-const commandListPattern = /^\s*(\d+)\s+(.*)$/gm;
 // This matches `{ppid} {pid} {command}`, allowing spaces in the command
-const nameListPattern = /^\s*(\d+)\s+(\d+)\s+(.*)$/gm;
+const processListPattern = /^\s*(\d+)\s+(\d+)\s+(.*)$/gm;
 // This matches the extensions windows includes in process names
 const executableExtensionPattern = /\.exe$/i;
+// Login shells are executed with a `-` prefixed to their argv[0]
+const loginShellPattern = /^-/;
 
 async function listProcessesUnix(): Promise<ProcessInfo[]> {
-  const [commands, names] = await Promise.all([
-    spawnAsync('ps', ['-A', '-ww', '-o', 'ppid=,pid=,args=']),
-    spawnAsync('ps', ['-A', '-o', 'pid=,comm=']),
+  const { stdout } = await spawnAsync('ps', [
+    '-A',
+    '-ww',
+    '-o',
+    'ppid=,pid=,args=',
   ]);
 
-  const executableByPid = new Map(
-    Array.from(
-      names.stdout.matchAll(commandListPattern),
-      (match): [number, string] => [Number(match[1]), match[2]!.trim()],
-    ),
-  );
-
   return Array.from(
-    commands.stdout.matchAll(nameListPattern),
+    stdout.matchAll(processListPattern),
     (match): ProcessInfo => {
-      const pid = Number(match[2]);
       const command = match[3]!.trim();
-      let executable = executableByPid.get(pid);
-
-      if (executable === undefined) {
-        const end = command.indexOf(' ');
-        executable = end === -1 ? command : command.slice(0, end);
-      }
+      const end = command.indexOf(' ');
+      const executable = end === -1 ? command : command.slice(0, end);
 
       return {
-        pid,
+        pid: Number(match[2]),
         ppid: Number(match[1]),
-        name: basename(executable),
+        name: basename(executable.replace(loginShellPattern, '')),
         command,
       };
     },
