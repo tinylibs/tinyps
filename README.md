@@ -29,6 +29,8 @@ console.log(tree.get(child.pid)); // [ 1234, 1235 ]
 - `signal` (`NodeJS.Signals`, optional) - signal to send, defaults to `SIGTERM`
 - Returns `Promise<void>`
 
+Note that `signal` is not supported on Windows, and will be ignored.
+
 ### `getProcessTree(pid)`
 
 - `pid` (`number`) - process to build the tree from
