@@ -61,6 +61,16 @@ Note that `signal` is not supported on Windows, and will be ignored.
 - `options.loose` (`boolean`, optional) - match any name containing `name`, ignoring case
 - Returns `Promise<ProcessInfo[]>`
 
+### `findProcessesByPort(port, options?)`
+
+- `port` (`number`) - local port to match against
+- `options.protocol` (`'tcp' | 'udp'`, optional) - only match sockets of this
+  protocol, defaults to matching both
+- Returns `Promise<ProcessInfo[]>`
+
+Matches any process holding a socket bound to `port` locally, whether it is
+listening or connected.
+
 ## License
 
 MIT
