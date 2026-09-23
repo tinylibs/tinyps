@@ -67,9 +67,14 @@ function buildProcessTree(
   processes: Iterable<[pid: number, ppid: number]>,
 ): ProcessTree {
   const childrenByParent = new Map<number, number[]>();
+  let exists = false;
 
   for (const [childPid, parentPid] of processes) {
     if (childPid === pid) {
+      exists = true;
+      continue;
+    }
+    if (childPid <= 0) {
       continue;
     }
     const children = childrenByParent.get(parentPid) ?? [];
@@ -78,6 +83,11 @@ function buildProcessTree(
   }
 
   const processTree: ProcessTree = new Map();
+
+  if (!exists) {
+    return processTree;
+  }
+
   const queue = [pid];
   for (const current of queue) {
     const children = childrenByParent.get(current) ?? [];
@@ -256,6 +266,10 @@ export async function killTree(
   pid: number,
   signal?: NodeJS.Signals,
 ): Promise<void> {
+  if (pid <= 0) {
+    throw new TypeError(`Expected a positive pid, received: ${pid}`);
+  }
+
   if (platform === 'win32') {
     return killTreeWindows(pid);
   }
