@@ -1,17 +1,17 @@
-# ⚙️ tinyproc
+# ⚙️ tinyps
 
 A cross-platform library of utilities for dealing with system processes.
 
 ## Install
 
 ```sh
-npm install tinyproc
+npm install tinyps
 ```
 
 ## Usage
 
 ```ts
-import { killTree, getProcessTree } from 'tinyproc';
+import { killTree, getProcessTree } from 'tinyps';
 
 // kill a process and everything it spawned
 await killTree(child.pid);

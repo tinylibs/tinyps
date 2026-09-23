@@ -1,5 +1,5 @@
 {
-  "name": "tinyproc",
+  "name": "tinyps",
   "version": "0.0.0-dev",
   "description": "A library of utilities for dealing with system processes.",
   "main": "./lib/main.js",
@@ -38,13 +38,13 @@
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://github.com/tinylibs/tinyproc#readme",
+  "homepage": "https://github.com/tinylibs/tinyps#readme",
   "bugs": {
-    "url": "https://github.com/tinylibs/tinyproc/issues"
+    "url": "https://github.com/tinylibs/tinyps/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tinylibs/tinyproc.git"
+    "url": "git+https://github.com/tinylibs/tinyps.git"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
