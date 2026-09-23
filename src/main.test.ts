@@ -38,23 +38,33 @@ function isAlive(pid: number): boolean {
 }
 
 /**
- * Spawns a process which itself spawns a single child, and resolves once
- * both are running.
+ * Spawns a three level process tree, and resolves once all of it is running.
  */
-function spawnTree(): Promise<{ parent: ChildProcess; childPid: number }> {
+function spawnTree(): Promise<{
+  parent: ChildProcess;
+  childPid: number;
+  grandchildPid: number;
+}> {
   return new Promise((resolve, reject) => {
     const parent = spawn(process.execPath, [parentFixture]);
     parent.on('error', reject);
     parent.stdout.once('data', (data) => {
-      resolve({ parent, childPid: Number(String(data).trim()) });
+      const [childPid, grandchildPid] = String(data)
+        .trim()
+        .split(' ')
+        .map(Number);
+
+      resolve({ parent, childPid: childPid!, grandchildPid: grandchildPid! });
     });
   });
 }
 
-function killTreeSync(parent: ChildProcess, childPid: number): void {
+function killTreeSync(parent: ChildProcess, ...pids: number[]): void {
   parent.kill('SIGKILL');
-  if (isAlive(childPid)) {
-    process.kill(childPid, 'SIGKILL');
+  for (const pid of pids) {
+    if (isAlive(pid)) {
+      process.kill(pid, 'SIGKILL');
+    }
   }
 }
 
@@ -90,13 +100,14 @@ function getUnusedPort(): Promise<number> {
 describe('getProcessTree', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('includes the given pid', async () => {
@@ -112,20 +123,27 @@ describe('getProcessTree', () => {
     expect(tree.has(childPid)).toBe(true);
   });
 
+  it('includes descendants of every depth', async () => {
+    const tree = await getProcessTree(parent.pid!);
+
+    expect(tree.get(childPid)).toEqual([grandchildPid]);
+    expect(tree.has(grandchildPid)).toBe(true);
+  });
+
   it('excludes processes outside the tree', async () => {
     const tree = await getProcessTree(childPid);
 
-    expect([...tree.keys()]).toEqual([childPid]);
+    expect([...tree.keys()]).toEqual([childPid, grandchildPid]);
   });
 
   it('produces an empty child list for a leaf process', async () => {
-    const tree = await getProcessTree(childPid);
+    const tree = await getProcessTree(grandchildPid);
 
-    expect(tree.get(childPid)).toEqual([]);
+    expect(tree.get(grandchildPid)).toEqual([]);
   });
 
   it('produces an empty tree for an unknown pid', async () => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
     await vi.waitFor(() => {
       expect(isAlive(parent.pid!)).toBe(false);
     });
@@ -137,14 +155,15 @@ describe('getProcessTree', () => {
 describe('killTree', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('kills the given process and its descendants', async () => {
@@ -153,6 +172,7 @@ describe('killTree', () => {
     await vi.waitFor(() => {
       expect(isAlive(parent.pid!)).toBe(false);
       expect(isAlive(childPid)).toBe(false);
+      expect(isAlive(grandchildPid)).toBe(false);
     });
   });
 
@@ -172,6 +192,7 @@ describe('killTree', () => {
 
     await vi.waitFor(() => {
       expect(isAlive(childPid)).toBe(false);
+      expect(isAlive(grandchildPid)).toBe(false);
     });
     expect(isAlive(parent.pid!)).toBe(true);
   });
@@ -193,7 +214,7 @@ describe('killTree', () => {
 
       await killTree(parent.pid!);
 
-      expect(order).toEqual([childPid, parent.pid]);
+      expect(order).toEqual([grandchildPid, childPid, parent.pid]);
     },
   );
 
@@ -219,7 +240,7 @@ describe('killTree', () => {
   );
 
   it('ignores processes which no longer exist', async () => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
     await vi.waitFor(() => {
       expect(isAlive(parent.pid!)).toBe(false);
     });
@@ -231,13 +252,14 @@ describe('killTree', () => {
 describe('isRunning', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('returns true for a running process', () => {
@@ -245,7 +267,7 @@ describe('isRunning', () => {
   });
 
   it('returns false for a process which has exited', async () => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
     await vi.waitFor(() => {
       expect(isAlive(parent.pid!)).toBe(false);
     });
@@ -262,21 +284,25 @@ describe('isRunning', () => {
 describe('getDescendants', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('resolves the descendants of the given pid', async () => {
-    expect(await getDescendants(parent.pid!)).toEqual([childPid]);
+    expect(await getDescendants(parent.pid!)).toEqual([
+      childPid,
+      grandchildPid,
+    ]);
   });
 
   it('resolves an empty list for a leaf process', async () => {
-    expect(await getDescendants(childPid)).toEqual([]);
+    expect(await getDescendants(grandchildPid)).toEqual([]);
   });
 
   it('resolves an empty list for an unknown pid', async () => {
@@ -287,13 +313,14 @@ describe('getDescendants', () => {
 describe('listProcesses', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('includes running processes', async () => {
@@ -315,20 +342,21 @@ describe('listProcesses', () => {
     const child = processes.find((proc) => proc.pid === childPid)!;
 
     expect(child.name).toBe(execName);
-    expect(child.command).toContain('idle.js');
+    expect(child.command).toContain('child.js');
   });
 });
 
 describe('getProcessInfo', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('resolves the info of the given process', async () => {
@@ -336,7 +364,7 @@ describe('getProcessInfo', () => {
 
     expect(info.pid).toBe(childPid);
     expect(info.ppid).toBe(parent.pid);
-    expect(info.command).toContain('idle.js');
+    expect(info.command).toContain('child.js');
   });
 
   it('resolves undefined for an unknown pid', async () => {
@@ -399,13 +427,14 @@ describe('findProcessesByPort', () => {
 describe('findProcessesByName', () => {
   let parent: ChildProcess;
   let childPid: number;
+  let grandchildPid: number;
 
   beforeEach(async () => {
-    ({ parent, childPid } = await spawnTree());
+    ({ parent, childPid, grandchildPid } = await spawnTree());
   });
 
   afterEach(() => {
-    killTreeSync(parent, childPid);
+    killTreeSync(parent, childPid, grandchildPid);
   });
 
   it('resolves processes with the given name', async () => {
