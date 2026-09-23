@@ -88,15 +88,17 @@ describe('parseWin32ProcessJson', () => {
   });
 
   it('parses a list of a single process', () => {
-    const output = JSON.stringify({
-      ProcessId: 1337,
-      ParentProcessId: 4,
-      Name: 'node.exe',
-      CommandLine: 'node .\\server.js',
-    });
+    const output =
+      '{"ProcessId":3864,"ParentProcessId":1440,' +
+      '"Name":"node.exe","CommandLine":"C:\\\\node.exe D:\\\\listener.js"}\r\n';
 
     expect(parseWin32ProcessJson(output)).toEqual([
-      { pid: 1337, ppid: 4, name: 'node', command: 'node .\\server.js' },
+      {
+        pid: 3864,
+        ppid: 1440,
+        name: 'node',
+        command: 'C:\\node.exe D:\\listener.js',
+      },
     ]);
   });
 });
@@ -104,11 +106,12 @@ describe('parseWin32ProcessJson', () => {
 describe('parseSsOutput', () => {
   it('parses the pid of each socket owner', () => {
     const output = [
-      'tcp   LISTEN 0      511    127.0.0.1:3000   0.0.0.0:*    users:(("node",pid=1337,fd=23))',
-      'tcp   ESTAB  0      0        10.0.0.2:3000   10.0.0.9:52398 users:(("node",pid=1338,fd=25))',
+      'tcp LISTEN 0      511    127.0.0.1:43063 0.0.0.0:* users:(("MainThread",pid=2625,fd=21))',
+      'tcp ESTAB  0      0      10.0.0.2:43063 10.0.0.9:52398 users:(("MainThread",pid=2626,fd=25))',
+      '',
     ].join('\n');
 
-    expect(parseSsOutput(output)).toEqual([1337, 1338]);
+    expect(parseSsOutput(output)).toEqual([2625, 2626]);
   });
 
   it('parses every owner of a shared socket', () => {
@@ -120,7 +123,7 @@ describe('parseSsOutput', () => {
   });
 
   it('parses a socket with no owner', () => {
-    const output = 'tcp   LISTEN 0      511    127.0.0.1:3000   0.0.0.0:*    ';
+    const output = 'tcp LISTEN 0      511    127.0.0.1:43063 0.0.0.0:*\n';
 
     expect(parseSsOutput(output)).toEqual([]);
   });
@@ -196,7 +199,7 @@ describe('parseOwningProcessJson', () => {
   });
 
   it('parses a list of a single pid', () => {
-    expect(parseOwningProcessJson('1337')).toEqual([1337]);
+    expect(parseOwningProcessJson('3864\r\n')).toEqual([3864]);
   });
 
   it('parses an empty list', () => {
