@@ -124,10 +124,13 @@ describe('getProcessTree', () => {
     expect(tree.get(childPid)).toEqual([]);
   });
 
-  it('produces a tree with no children for an unknown pid', async () => {
-    const tree = await getProcessTree(-1);
+  it('produces an empty tree for an unknown pid', async () => {
+    killTreeSync(parent, childPid);
+    await vi.waitFor(() => {
+      expect(isAlive(parent.pid!)).toBe(false);
+    });
 
-    expect(tree).toEqual(new Map([[-1, []]]));
+    expect(await getProcessTree(parent.pid!)).toEqual(new Map());
   });
 });
 
@@ -170,6 +173,11 @@ describe('killTree', () => {
       expect(isAlive(childPid)).toBe(false);
     });
     expect(isAlive(parent.pid!)).toBe(true);
+  });
+
+  it('throws for a non-positive pid', async () => {
+    await expect(killTree(0)).rejects.toThrow(TypeError);
+    await expect(killTree(-1)).rejects.toThrow(TypeError);
   });
 
   it('ignores processes which no longer exist', async () => {
