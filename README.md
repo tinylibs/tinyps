@@ -41,6 +41,9 @@ Note that `signal` is not supported on Windows, and will be ignored.
 - `pid` (`number`) - process to check
 - Returns `boolean`
 
+A zombie process is still in the process table, so this returns `true` for a
+process which has exited but has not yet been released by its parent.
+
 ### `getDescendants(pid)`
 
 - `pid` (`number`) - process to collect descendants of
@@ -60,6 +63,9 @@ Note that `signal` is not supported on Windows, and will be ignored.
 - `name` (`string`) - name to match against
 - `options.loose` (`boolean`, optional) - match any name containing `name`, ignoring case
 - Returns `Promise<ProcessInfo[]>`
+
+Names come from the process' `argv[0]`, so a process which has renamed itself
+(e.g. via `process.title`) matches its new name rather than its executable.
 
 ### `findProcessesByPort(port, options?)`
 
