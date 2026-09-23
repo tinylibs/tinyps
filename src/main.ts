@@ -12,12 +12,15 @@ async function spawnAsync(
     let stdout = '';
     let stderr = '';
 
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
     child.stdout.on('data', (data) => {
-      stdout += data.toString();
+      stdout += data;
     });
 
     child.stderr.on('data', (data) => {
-      stderr += data.toString();
+      stderr += data;
     });
 
     child.on('close', (code) => {
@@ -149,7 +152,8 @@ async function listProcessesWindows(): Promise<ProcessInfo[]> {
     '-NoProfile',
     '-NonInteractive',
     '-Command',
-    'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress',
+    '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); ' +
+      'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress',
   ]);
   const parsed: Win32Process | Win32Process[] = JSON.parse(stdout);
   const processes = Array.isArray(parsed) ? parsed : [parsed];
@@ -242,7 +246,8 @@ async function findPidsByPortWindows(
     '-NoProfile',
     '-NonInteractive',
     '-Command',
-    `@(${query}) | Select-Object -ExpandProperty OwningProcess | ` +
+    '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); ' +
+      `@(${query}) | Select-Object -ExpandProperty OwningProcess | ` +
       'ConvertTo-Json -Compress',
   ]);
 
