@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer, type AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { basename, extname } from 'node:path';
@@ -382,6 +383,42 @@ describe('findProcessesByPort', () => {
 
   afterEach(() => {
     child.kill('SIGKILL');
+  });
+
+  // TODO: temporary, to capture real output for the parser fixtures
+  it('logs the raw output of the underlying tools', async () => {
+    const run = promisify(execFile);
+
+    if (process.platform === 'linux') {
+      const { stdout } = await run('ss', [
+        '-nHpa',
+        '-t',
+        '-u',
+        `sport = :${port}`,
+      ]);
+      console.log('ss:', JSON.stringify(stdout));
+    }
+
+    if (process.platform === 'win32') {
+      const owners = await run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `@(Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue) | ` +
+          'Select-Object -ExpandProperty OwningProcess | ConvertTo-Json -Compress',
+      ]);
+      console.log('OwningProcess:', JSON.stringify(owners.stdout));
+
+      const processes = await run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Get-CimInstance Win32_Process -Filter "ProcessId = ${child.pid}" | ` +
+          'Select-Object ProcessId,ParentProcessId,Name,CommandLine | ' +
+          'ConvertTo-Json -Compress',
+      ]);
+      console.log('Win32_Process:', JSON.stringify(processes.stdout));
+    }
   });
 
   it('resolves the process bound to the given port', async () => {
