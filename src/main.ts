@@ -51,14 +51,20 @@ export interface ProcessInfo {
 }
 
 function killAll(processTree: ProcessTree, signal?: NodeJS.Signals): void {
+  const errors: unknown[] = [];
+
   for (const pid of processTree.keys()) {
     try {
       process.kill(pid, signal);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ESRCH') {
-        throw err;
+        errors.push(err);
       }
     }
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'Failed to kill one or more processes');
   }
 }
 

@@ -143,6 +143,7 @@ describe('killTree', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     killTreeSync(parent, childPid);
   });
 
@@ -179,6 +180,27 @@ describe('killTree', () => {
     await expect(killTree(0)).rejects.toThrow(TypeError);
     await expect(killTree(-1)).rejects.toThrow(TypeError);
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'kills the rest of the tree when a process cannot be killed',
+    async () => {
+      const kill = process.kill.bind(process);
+      vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+        if (pid === parent.pid) {
+          throw Object.assign(new Error('Operation not permitted'), {
+            code: 'EPERM',
+          });
+        }
+        return kill(pid, signal);
+      });
+
+      await expect(killTree(parent.pid!)).rejects.toThrow(AggregateError);
+
+      await vi.waitFor(() => {
+        expect(isAlive(childPid)).toBe(false);
+      });
+    },
+  );
 
   it('ignores processes which no longer exist', async () => {
     killTreeSync(parent, childPid);
