@@ -56,7 +56,9 @@ export interface ProcessInfo {
 function killAll(processTree: ProcessTree, signal?: NodeJS.Signals): void {
   const errors: unknown[] = [];
 
-  for (const pid of processTree.keys()) {
+  const pids = Array.from(processTree.keys()).reverse();
+
+  for (const pid of pids) {
     try {
       process.kill(pid, signal);
     } catch (err) {

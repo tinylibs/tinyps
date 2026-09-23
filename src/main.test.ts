@@ -182,6 +182,22 @@ describe('killTree', () => {
   });
 
   it.skipIf(process.platform === 'win32')(
+    'kills descendants before their parents',
+    async () => {
+      const kill = process.kill.bind(process);
+      const order: number[] = [];
+      vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+        order.push(pid);
+        return kill(pid, signal);
+      });
+
+      await killTree(parent.pid!);
+
+      expect(order).toEqual([childPid, parent.pid]);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
     'kills the rest of the tree when a process cannot be killed',
     async () => {
       const kill = process.kill.bind(process);
