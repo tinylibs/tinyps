@@ -304,3 +304,43 @@ export async function getDescendants(pid: number): Promise<number[]> {
   const tree = await getProcessTree(pid);
   return Array.from(tree.keys()).filter((current) => current !== pid);
 }
+
+export async function getProcessAncestry(
+  pid: number = process.pid,
+): Promise<ProcessInfo[]> {
+  if (pid <= 0) {
+    throw new TypeError(`Expected a positive pid, received: ${pid}`);
+  }
+
+  const processes = await listProcesses();
+  const processMap = new Map<number, ProcessInfo>(
+    processes.map((proc) => [proc.pid, proc]),
+  );
+
+  const ancestry: ProcessInfo[] = [];
+  const visited = new Set<number>();
+  let currentPid: number | undefined = pid;
+
+  while (currentPid && currentPid > 0) {
+    if (visited.has(currentPid)) {
+      break;
+    }
+    visited.add(currentPid);
+
+    const info = processMap.get(currentPid);
+    if (!info) {
+      break;
+    }
+
+    ancestry.push(info);
+
+    // Stop at root/system boundary PIDs (0/1 on Unix, 0/4 on Windows) or self-parenting
+    if (info.ppid === 0 || info.ppid === 1 || info.ppid === 4 || info.ppid === info.pid) {
+      break;
+    }
+
+    currentPid = info.ppid;
+  }
+
+  return ancestry;
+}
