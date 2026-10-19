@@ -335,7 +335,12 @@ export async function getProcessAncestry(
     ancestry.push(info);
 
     // Stop at root/system boundary PIDs (0/1 on Unix, 0/4 on Windows) or self-parenting
-    if (info.ppid === 0 || info.ppid === 1 || info.ppid === 4 || info.ppid === info.pid) {
+    if (
+      info.ppid === 0 ||
+      info.ppid === 1 ||
+      info.ppid === 4 ||
+      info.ppid === info.pid
+    ) {
       break;
     }
 
