@@ -7,6 +7,7 @@ import {
   findProcessesByName,
   findProcessesByPort,
   getDescendants,
+  getProcessAncestry,
   getProcessInfo,
   getProcessTree,
   isRunning,
@@ -307,6 +308,50 @@ describe('getDescendants', () => {
 
   it('resolves an empty list for an unknown pid', async () => {
     expect(await getDescendants(-1)).toEqual([]);
+  });
+});
+
+describe('getProcessAncestry', () => {
+  let parent: ChildProcess;
+  let childPid: number;
+  let grandchildPid: number;
+
+  beforeEach(async () => {
+    ({ parent, childPid, grandchildPid } = await spawnTree());
+  });
+
+  afterEach(() => {
+    killTreeSync(parent, childPid, grandchildPid);
+  });
+
+  it('resolves the ancestry chain of the given process', async () => {
+    const ancestry = await getProcessAncestry(grandchildPid);
+    const pids = ancestry.map((proc) => proc.pid);
+
+    expect(pids.slice(0, 3)).toEqual([grandchildPid, childPid, parent.pid!]);
+  });
+
+  it('resolves the process info for each ancestor', async () => {
+    const ancestry = await getProcessAncestry(childPid);
+
+    expect(ancestry[0]?.pid).toBe(childPid);
+    expect(ancestry[1]?.pid).toBe(parent.pid);
+    expect(ancestry[1]?.command).toContain('parent.js');
+  });
+
+  it('defaults to the current process pid', async () => {
+    const ancestry = await getProcessAncestry();
+
+    expect(ancestry[0]?.pid).toBe(process.pid);
+  });
+
+  it('throws for a non-positive pid', async () => {
+    await expect(getProcessAncestry(0)).rejects.toThrow(TypeError);
+    await expect(getProcessAncestry(-1)).rejects.toThrow(TypeError);
+  });
+
+  it('resolves an empty list for an unknown pid', async () => {
+    expect(await getProcessAncestry(999_999)).toEqual([]);
   });
 });
 
