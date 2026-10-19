@@ -11,7 +11,7 @@ npm install tinyps
 ## Usage
 
 ```ts
-import { killTree, getProcessTree } from 'tinyps';
+import { killTree, getProcessTree, getProcessAncestry } from 'tinyps';
 
 // kill a process and everything it spawned
 await killTree(child.pid);
@@ -19,6 +19,10 @@ await killTree(child.pid);
 // or inspect the tree first
 const tree = await getProcessTree(child.pid);
 console.log(tree.get(child.pid)); // [ 1234, 1235 ]
+
+// trace a process's parent chain back to the root
+const ancestry = await getProcessAncestry(child.pid);
+console.log(ancestry.map((proc) => proc.pid)); // [ childPid, parentPid, ... ]
 ```
 
 ## API
@@ -48,6 +52,13 @@ process which has exited but has not yet been released by its parent.
 
 - `pid` (`number`) - process to collect descendants of
 - Returns `Promise<number[]>`
+
+### `getProcessAncestry(pid?)`
+
+- `pid` (`number`, optional) - process to trace ancestry from, defaults to `process.pid`
+- Returns `Promise<ProcessInfo[]>`
+
+Returns an ordered list of process info objects starting from the target process and traversing upward through its parents to the root process.
 
 ### `listProcesses()`
 
