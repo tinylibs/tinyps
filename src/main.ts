@@ -318,17 +318,12 @@ export async function getProcessAncestry(
   );
 
   const ancestry: ProcessInfo[] = [];
-  const visited = new Set<number>();
   let currentPid: number | undefined = pid;
 
   while (currentPid && currentPid > 0) {
-    if (visited.has(currentPid)) {
-      break;
-    }
-    visited.add(currentPid);
-
     const info = processMap.get(currentPid);
-    if (!info) {
+
+    if (!info || ancestry.includes(info)) {
       break;
     }
 
