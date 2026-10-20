@@ -318,9 +318,10 @@ export async function getProcessAncestry(
   );
 
   const ancestry: ProcessInfo[] = [];
-  let currentPid: number | undefined = pid;
+  let currentPid: number = pid;
 
-  while (currentPid && currentPid > 0) {
+  // root processes have a ppid of 0, which ends the walk
+  while (currentPid > 0) {
     const info = processMap.get(currentPid);
 
     if (!info || ancestry.includes(info)) {
@@ -328,16 +329,6 @@ export async function getProcessAncestry(
     }
 
     ancestry.push(info);
-
-    // Stop at root/system boundary PIDs (0/1 on Unix, 0/4 on Windows) or self-parenting
-    if (
-      info.ppid === 0 ||
-      info.ppid === 1 ||
-      info.ppid === 4 ||
-      info.ppid === info.pid
-    ) {
-      break;
-    }
 
     currentPid = info.ppid;
   }

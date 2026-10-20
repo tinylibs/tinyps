@@ -60,6 +60,8 @@ process which has exited but has not yet been released by its parent.
 
 Returns an ordered list of process info objects starting from the target process and traversing upward through its parents to the root process.
 
+**Note:** On Windows, a parent may have exited and had its pid reassigned. In that case, the ancestry may contain unrelated processes.
+
 ### `listProcesses()`
 
 - Returns `Promise<ProcessInfo[]>`

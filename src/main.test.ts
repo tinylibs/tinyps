@@ -329,14 +329,7 @@ describe('getProcessAncestry', () => {
     const pids = ancestry.map((proc) => proc.pid);
 
     expect(pids.slice(0, 3)).toEqual([grandchildPid, childPid, parent.pid!]);
-  });
-
-  it('resolves the process info for each ancestor', async () => {
-    const ancestry = await getProcessAncestry(childPid);
-
-    expect(ancestry[0]?.pid).toBe(childPid);
-    expect(ancestry[1]?.pid).toBe(parent.pid);
-    expect(ancestry[1]?.command).toContain('parent.js');
+    expect(ancestry[2]?.command).toContain('parent.js');
   });
 
   it('defaults to the current process pid', async () => {
@@ -345,13 +338,38 @@ describe('getProcessAncestry', () => {
     expect(ancestry[0]?.pid).toBe(process.pid);
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'ends with the root process',
+    async () => {
+      const ancestry = await getProcessAncestry();
+
+      expect(ancestry.at(-1)?.pid).toBe(1);
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'ends with the system process or a missing parent',
+    async () => {
+      const ancestry = await getProcessAncestry();
+      const pids = (await listProcesses()).map((proc) => proc.pid);
+      const last = ancestry.at(-1)!;
+
+      expect(last.pid === 4 || !pids.includes(last.ppid)).toBe(true);
+    },
+  );
+
   it('throws for a non-positive pid', async () => {
     await expect(getProcessAncestry(0)).rejects.toThrow(TypeError);
     await expect(getProcessAncestry(-1)).rejects.toThrow(TypeError);
   });
 
   it('resolves an empty list for an unknown pid', async () => {
-    expect(await getProcessAncestry(999_999)).toEqual([]);
+    killTreeSync(parent, childPid, grandchildPid);
+    await vi.waitFor(() => {
+      expect(isAlive(parent.pid!)).toBe(false);
+    });
+
+    expect(await getProcessAncestry(parent.pid!)).toEqual([]);
   });
 });
 
