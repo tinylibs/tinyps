@@ -47,3 +47,22 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Test
         run: npm test
+
+  test-alpine:
+    needs: lint
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-alpine
+      # an init process is needed to reap killed processes
+      options: --init
+    steps:
+      - name: Install System Dependencies
+        run: apk add --no-cache iproute2
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Dependencies
+        run: npm ci --ignore-scripts
+      - name: Test
+        run: npm test

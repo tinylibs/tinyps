@@ -111,12 +111,20 @@ function buildProcessTree(
 }
 
 async function listProcessesUnix(): Promise<ProcessInfo[]> {
-  const { stdout } = await spawnAsync('ps', [
-    '-A',
-    '-ww',
-    '-o',
-    'ppid=,pid=,args=',
-  ]);
+  let stdout: string;
+
+  try {
+    ({ stdout } = await spawnAsync('ps', [
+      '-A',
+      '-ww',
+      '-o',
+      'ppid=,pid=,args=',
+    ]));
+  } catch {
+    // BusyBox ps (e.g. Alpine) rejects -A/-ww, but lists all processes
+    // by default and does not truncate args
+    ({ stdout } = await spawnAsync('ps', ['-o', 'ppid=,pid=,args=']));
+  }
 
   return parsePsOutput(stdout);
 }

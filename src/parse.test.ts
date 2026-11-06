@@ -48,6 +48,17 @@ describe('parsePsOutput', () => {
     expect(process.command).toBe('-zsh');
   });
 
+  it('strips the comm prefix busybox adds to args', () => {
+    const output = '    1   526 {node-MainThread} /usr/local/bin/node ./a.js';
+
+    expect(parsePsOutput(output)[0]).toEqual({
+      pid: 526,
+      ppid: 1,
+      name: 'node',
+      command: '/usr/local/bin/node ./a.js',
+    });
+  });
+
   it('parses a kernel thread', () => {
     expect(parsePsOutput('    2  1234 [kworker/0:1]')[0]).toEqual({
       pid: 1234,
