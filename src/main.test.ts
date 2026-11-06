@@ -343,7 +343,7 @@ describe('getProcessAncestry', () => {
     async () => {
       const ancestry = await getProcessAncestry();
 
-      expect(ancestry.at(-1)?.pid).toBe(1);
+      expect(ancestry.at(-1)?.ppid).toBe(0);
     },
   );
 

@@ -22,12 +22,14 @@ const socketOwnerPattern = /pid=(\d+)/g;
 const executableExtensionPattern = /\.exe$/i;
 // Login shells are executed with a `-` prefixed to their argv[0]
 const loginShellPattern = /^-/;
+// BusyBox ps prefixes args with `{comm} ` when comm differs from argv[0]
+const busyboxCommPattern = /^\{[^}]*\} (?=\S)/;
 
 export function parsePsOutput(stdout: string): ProcessInfo[] {
   return Array.from(
     stdout.matchAll(processListPattern),
     (match): ProcessInfo => {
-      const command = match[3]!.trim();
+      const command = match[3]!.trim().replace(busyboxCommPattern, '');
       const end = command.indexOf(' ');
       const executable = end === -1 ? command : command.slice(0, end);
 
